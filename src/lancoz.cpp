@@ -60,7 +60,8 @@ void lancoz(const int N, SparseMatrixCRS <T> *result) {
         compute_spmv<T>(A.N, &A, v, w);
 
         gemv_norm<T>(A.N, 1, w, tmp);
-
+        
+        
         alpha = dot_product(A.N, w, v);
         
         alpha = is_zero(alpha) ? 0 : alpha;

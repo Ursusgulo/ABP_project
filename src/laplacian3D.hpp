@@ -55,40 +55,25 @@ void create_identity_matrix_CRS(int N, int *col, int *row_starts, T *val) {
 }
 
 template <typename T>
-void sparse_kronecker_product_CRS(
-    const SparseMatrixCRS<T> *A,
-    const SparseMatrixCRS<T> *B,
-    SparseMatrixCRS<T> *C)
-{
-    int idx = 0;
-    int* C_row = C->row_starts.data();
-    int* C_col = C->col.data();
-    T*   C_val = C->val.data();
-
-    const int* A_row = A->row_starts.data();
-    const int* A_col = A->col.data();
-    const T*   A_val = A->val.data();
-
-    const int* B_row = B->row_starts.data();
-    const int* B_col = B->col.data();
-    const T*   B_val = B->val.data();
-
-    C_row[0] = 0;
-    // Loop rows of A
+void sparse_kronecker_product_CRS(SparseMatrixCRS <T> *A, SparseMatrixCRS <T> *B, SparseMatrixCRS <T> *C) {
+    int idx = 0; // index in C->val and C->col
+    C->row_starts[0] = 0;
+    // Iterate over rows of A
     for (int i = 0; i < A->N; i++) {
-        // Loop rows of B
+        // Iterate over rows of B
         for (int j = 0; j < B->N; j++) {
-            int C_row_index = i * B->N + j;
-            // Loop non-zeros in row i of A and row j of B
-            for (int a_idx = A_row[i]; a_idx < A_row[i+1]; a_idx++) {
-                for (int b_idx = B_row[j]; b_idx < B_row[j+1]; b_idx++) {
-
-                    C_val[idx] = A_val[a_idx] * B_val[b_idx];
-                    C_col[idx] = A_col[a_idx] * B->N + B_col[b_idx];
+            // Current row in C
+            int C_row = i * B->N + j;
+            // Iterate over non-zero elements in row i of A and row j of B
+            for (int a_idx = A->row_starts[i]; a_idx < A->row_starts[i+1]; a_idx++) {
+                for (int b_idx = B->row_starts[j]; b_idx < B->row_starts[j+1]; b_idx++) {
+                    C->val[idx] = A->val[a_idx] * B->val[b_idx];
+                    C->col[idx] = A->col[a_idx] * B->N + B->col[b_idx];
                     idx++;
                 }
             }
-            C_row[C_row_index + 1] = idx;
+            C->row_starts[C_row + 1] = idx;
+
         }
     }
 }
@@ -106,52 +91,37 @@ void sparse_matrix_addition_CRS(
     T n_plus_one = result->N + 1;
     // T scalar = 1/(n_plus_one * n_plus_one);
     T scalar = 1;
-    const int* A_row = A->row_starts.data();
-    const int* A_col = A->col.data();
-    const T* A_val = A->val.data();
-
-    const int* B_row = B->row_starts.data();
-    const int* B_col = B->col.data();
-    const T* B_val = B->val.data();
-
-    const int* C_row = C->row_starts.data();
-    const int* C_col = C->col.data();
-    const T* C_val = C->val.data();
-
-    int* result_row = result->row_starts.data();
-    int* result_col = result->col.data();
-    T* result_val = result->val.data();
 
     for (int i = 0; i < A->N; i++) {
-        int index_A = A_row[i], row_end_A = A_row[i+1];
-        int index_B = B_row[i], row_end_B = B_row[i+1];
-        int index_C = C_row[i], row_end_C = C_row[i+1];
+        int index_A = A->row_starts[i], row_end_A = A->row_starts[i+1];
+        int index_B = B->row_starts[i], row_end_B = B->row_starts[i+1];
+        int index_C = C->row_starts[i], row_end_C = C->row_starts[i+1];
 
         while (index_A < row_end_A || index_B < row_end_B || index_C < row_end_C) {
             //rerieve current column indices from each row. If there are no more 
             //elements, set to int_max to avoid minimum
-            int col_a = (index_A < row_end_A ? A_col[index_A] : INT_MAX);
-            int col_b = (index_B < row_end_B ? B_col[index_B] : INT_MAX);
-            int col_c = (index_C < row_end_C ? C_col[index_C] : INT_MAX);
+            int col_a = (index_A < row_end_A ? A->col[index_A] : INT_MAX);
+            int col_b = (index_B < row_end_B ? B->col[index_B] : INT_MAX);
+            int col_c = (index_C < row_end_C ? C->col[index_C] : INT_MAX);
             //retrieve minimum column index with element
             int min_d = std::min(col_a, std::min(col_b, col_c));
 
             //add value to sum if column index matches minimum
 
             T sum = 0;
-            if (index_A < row_end_A && A_col[index_A] == min_d) sum += A_val[index_A++];
-            if (index_B < row_end_B && B_col[index_B] == min_d) sum += B_val[index_B++];
-            if (index_C < row_end_C && C_col[index_C] == min_d) sum += C_val[index_C++];
+            if (index_A < row_end_A && A->col[index_A] == min_d) sum += A->val[index_A++];
+            if (index_B < row_end_B && B->col[index_B] == min_d) sum += B->val[index_B++];
+            if (index_C < row_end_C && C->col[index_C] == min_d) sum += C->val[index_C++];
             sum *= scalar;
             //update col index and value to result
             //increment row index
             if (sum != 0.0) {
-                result_col[idx] = min_d;
-                result_val[idx] = sum;
+                result->col[idx] = min_d;
+                result->val[idx] = sum;
                 idx++;
             }
         }
-        result_row[i+1] = idx;
+        result->row_starts[i+1] = idx;
     }
     result->nnz = idx;
 }
