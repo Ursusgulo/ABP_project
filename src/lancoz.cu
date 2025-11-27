@@ -24,7 +24,6 @@ void d_compute_spmv(const std::size_t N,
                              const T *x, 
                              T *y)
 {
-  // TODO implement for GPU
   int row = threadIdx.x + blockIdx.x * blockDim.x;
   if (row < N)
   {
@@ -66,12 +65,13 @@ void new_vector_v(const std::size_t N, const T *w, const T *beta, T *v, int coun
 
 
 template <typename T>
-void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
+void lancoz_gpu(const std::size_t N, const std::size_t m, SparseMatrixCRS <T> *result) {
     std::size_t *d_A_row_starts;
     int *d_A_col;
     T *h_v, *h_w;
     T *d_A_val, d_A_N;
     T *d_v, *d_w, *d_tmp;
+    T alpha, h_tmp;
 
     SparseMatrixCRS <T> A;
     generate_laplacian3D<T>(N, A);
@@ -82,6 +82,8 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
     generate_unit_vector<T>(new_N, h_v, 0);
 
 
+    // TODO move first iteration to device?
+    
     //Do iteration one on host
     h_w = new T[new_N];
     //Ax
@@ -89,7 +91,8 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
     compute_spmv<T>(new_N, &A, h_v, h_w);
 
     //alpha = w*v
-    T alpha = dot_product(new_N, h_w, h_v);
+    alpha = dot_product(new_N, h_w, h_v);
+    
 
     //w' ||Ax - alpha*v||
     //beta = ||w'||
@@ -134,7 +137,7 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
     int n_blocks = (new_N + block_size - 1) / (block_size);
 
     T axpy_scalar = -1;
-    for(int j = 1; j < new_N; j++) {
+    for(int j = 1; j < m; j++) {
 
         //-b * v_{j-1}
         T scale_beta = -beta;
@@ -162,6 +165,7 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
         //     scale_vector<T><<<n_blocks, block_size>>>(new_N, &scale_beta, d_w, d_v);
         // }
         new_vector_v<T><<<n_blocks, block_size>>>(new_N, d_w, &beta, d_v, j);
+        // new_vector_v<T><<<n_blocks, block_size>>>(new_N, d_w, T beta, d_v, j); // EBBAS FIX
         cudaDeviceSynchronize();
         
         d_compute_spmv<T><<<n_blocks, block_size>>>(new_N, d_A_row_starts, d_A_col, d_A_val, d_v, d_w);
@@ -198,11 +202,11 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
             result->row_starts[j + 1] = result->row_starts[j] + 2;
         }
 
-        alpha = -alpha;
+        h_tmp = -alpha;
         cublasSaxpy(
             handle,
             new_N,
-            &alpha,
+            &h_tmp,
             d_v, 1,
             d_w, 1
         );
@@ -228,16 +232,17 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
     delete [] h_w;
 }
 
-int main(){
+int main() {
     const int N = 2; //size in one dimension
     int N3 = N * N * N;
     int nnz = N3 * 3 -2;
+    int m = 20 * N; 
     using T = float;
-    SparseMatrixCRS <T> result(N3, nnz);
-    lancoz_gpu<T>(N, &result);
+    SparseMatrixCRS <T> result(m*m, m*3-2); //EBBA FIX changed to N3 -> m*m and nnz -> m*3-2
+    lancoz_gpu<T>(N, m, &result);
 
     printf("Resulting Lancoz matrix:\n");
-    for(int i = 0; i < 11; i++) {
+    for(int i = 0; i < m; i++) {
         std::cout << "Row " << i << ": ";
         for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
             std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
