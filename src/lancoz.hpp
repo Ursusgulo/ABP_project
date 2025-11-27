@@ -25,8 +25,7 @@ void lancoz(const int N, SparseMatrixCRS <T> *result) {
     //generate laplacian matrix in 3D
     SparseMatrixCRS <T> A;
     generate_laplacian3D<T>(N, A);
-    printf("A.N = %d\n", A.N);
-    printf("Laplacian 3D matrix generated with nnz: %d\n", A.row_starts[A.N]);
+
     //generate unit vector
     T *v = new T[A.N];
     T *tmp = new T[A.N];
@@ -87,22 +86,22 @@ void lancoz(const int N, SparseMatrixCRS <T> *result) {
     
 }
 
-int main(){
-    const int N = 10; //size in one dimension
-    int N3 = N * N * N;
-    int nnz = N3 * 3 -2;
-    using T = double;
-    SparseMatrixCRS <T> result(N3, nnz);
-    lancoz<double>(N, &result);
+// int main(){
+//     const int N = 10; //size in one dimension
+//     int N3 = N * N * N;
+//     int nnz = N3 * 3 -2;
+//     using T = double;
+//     SparseMatrixCRS <T> result(N3, nnz);
+//     lancoz<double>(N, &result);
 
-    // printf("Resulting Lancoz matrix:\n");
-    // for(int i = 0; i < result.N; i++) {
-    //     std::cout << "Row " << i << ": ";
-    //     for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-    //         std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-    //     }
-    //     std::cout << std::endl;
-    // }
+//     // printf("Resulting Lancoz matrix:\n");
+//     // for(int i = 0; i < result.N; i++) {
+//     //     std::cout << "Row " << i << ": ";
+//     //     for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
+//     //         std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
+//     //     }
+//     //     std::cout << std::endl;
+//     // }
 
-    return 0;
-}
+//     return 0;
+// }

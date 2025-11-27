@@ -1,7 +1,19 @@
 #include "lancoz.hpp"
+#include <cublas_v2.h>
 #include <cmath>
 
 const int block_size = 512;
+
+
+#define CUDA_CHECK(call)                                                     \
+    do {                                                                     \
+        cudaError_t err = call;                                              \
+        if (err != cudaSuccess) {                                            \
+            fprintf(stderr, "CUDA error at %s:%d: %s\n",                     \
+                    __FILE__, __LINE__, cudaGetErrorString(err));            \
+            exit(EXIT_FAILURE);                                              \
+        }                                                                    \
+    } while (0)
 
 template <typename T>
 __global__
@@ -83,7 +95,6 @@ void new_vector_v(const std::size_t N, const T *w, const T *beta, T *v, int coun
     if (idx < N) {
         if (*beta == 0) {
             v[idx] = (idx == counter) ? 1.0 : 0.0;
-            if(idx == counter) counter++;
         } else {
             v[idx] = w[idx] / (*beta);
         }
@@ -101,7 +112,6 @@ void update_result_matrix(T *d_result_val, const T *d_beta) {
 
 template <typename T>
 void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
-    int counter = 0;
     std::size_t *d_A_row_starts;
     int *d_A_col;
     T *h_v, *h_w;
@@ -116,17 +126,16 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
     std::size_t new_N = A.N;
 
     h_v = new T[new_N];
-    generate_unit_vector<T>(new_N, h_v, counter);
+    generate_unit_vector<T>(new_N, h_v, 0);
 
 
     int n_blocks = (new_N + block_size - 1) / (block_size);
-    const unsigned int reduce_blocks = (N + (2 * block_size) - 1) / (2 * block_size);
+    const unsigned int reduce_blocks = (new_N + (2 * block_size) - 1) / (2 * block_size);
 
     //Do iteration one on host
     h_w = new T[new_N];
     //Ax
-    printf("A.row_starts[new_N]: %d\n", A.row_starts[new_N]);
-    printf("A.nz: %d\n", A.nnz);
+
     compute_spmv<T>(new_N, &A, h_v, h_w);
 
     //alpha = w*v
@@ -145,7 +154,6 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
 
     //move data to device and do remaining iterations there
     //Allocate Laplacian3D matrix on device
-    printf("N: %zu\n", new_N);
 
     cudaMalloc(&d_A_val, A.row_starts[new_N]*sizeof(T));
     cudaMalloc(&d_A_row_starts, (new_N + 1)*sizeof(std::size_t));
@@ -162,12 +170,12 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
     cudaMalloc(&d_tmp, new_N*sizeof(T));
 
     //Copy Laplacian3D matrix to device
-    cudaMemcpy(d_A_val, A.val, A.row_starts[new_N]*sizeof(T), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_A_row_starts, A.row_starts, (new_N + 1)*sizeof(std::size_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_A_col, A.col, A.row_starts[new_N]*sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A_val, A.val.data(), A.nnz*sizeof(T), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A_row_starts, A.row_starts.data(), (new_N + 1)*sizeof(std::size_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A_col, A.col.data(), A.nnz*sizeof(int), cudaMemcpyHostToDevice);
 
     //copy result matrix to device
-    cudaMemcpy(d_result_val, result->val, result->nnz*sizeof(T), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_result_val, result->val.data(), result->nnz*sizeof(T), cudaMemcpyHostToDevice);
     //cudaMemcpy(d_result_row_starts, result->row_starts, (result->N + 1)*sizeof(int), cudaMemcpyHostToDevice);
     //cudaMemcpy(d_result_col, result->col, result->nnz*sizeof(int), cudaMemcpyHostToDevice);
     
@@ -177,22 +185,35 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
 
     //allocate scalars on device
     cudaMalloc(&d_beta, sizeof(T));
+    cudaMemcpy(d_beta, &beta, sizeof(T), cudaMemcpyHostToDevice);
 
-    T identity = -1;
+    // cublasHandle_t handle;
+    // cublasCreate(&handle);
+
+    T axpy_scalar = -1;
     for(int j = 1; j < new_N; j++) {
         
         d_scale_vector<T><<<n_blocks, block_size>>>(new_N, d_beta, d_v, d_tmp);
         cudaDeviceSynchronize();
 
-        new_vector_v<T><<<n_blocks, block_size>>>(N, d_w, d_beta, d_v, counter);
+        new_vector_v<T><<<n_blocks, block_size>>>(new_N, d_w, d_beta, d_v, j);
         cudaDeviceSynchronize();
         
         d_compute_spmv<T><<<n_blocks, block_size>>>(new_N, d_A_row_starts, d_A_col, d_A_val, d_v, d_w);
         cudaDeviceSynchronize();
 
-        gemv<T><<<n_blocks, block_size>>>(new_N, &identity, d_w, d_tmp);
+        // cublasStatus_t cublasSaxpy(
+        //     handle,
+        //     new_N,
+        //     &axpy_scalar,
+        //     d_tmp, 1,
+        //     d_w, 1
+        // );
+
+        gemv<T><<<n_blocks, block_size>>>(new_N, &axpy_scalar, d_w, d_tmp);
         cudaDeviceSynchronize();
         
+        cudaMemset(d_result_val + result->row_starts[j] + 1, 0, sizeof(T));
         d_dot_product<T, block_size><<<reduce_blocks, block_size, block_size * sizeof(T)>>>
                                     (new_N, d_w, d_v, d_result_val + result->row_starts[j] + 1);
         cudaDeviceSynchronize();
@@ -213,7 +234,7 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
         cudaDeviceSynchronize();
         update_result_matrix<T><<<1,1>>>(d_result_val + result->row_starts[j] - 1, d_beta);
     }
-    cudaMemcpy(result->val, d_result_val, result->nnz*sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(result->val.data(), d_result_val, result->nnz*sizeof(T), cudaMemcpyDeviceToHost);
     cudaFree(d_result_val);
     cudaFree(d_A_val);
     cudaFree(d_A_row_starts);
@@ -224,22 +245,22 @@ void lancoz_gpu(const std::size_t N, SparseMatrixCRS <T> *result) {
     cudaFree(d_beta);
 }
 
-// int main(){
-//     const int N = 2; //size in one dimension
-//     int N3 = N * N * N;
-//     int nnz = N3 * 3 -2;
-//     using T = float;
-//     SparseMatrixCRS <T> result(N3, nnz);
-//     lancoz_gpu<T>(N, &result);
+int main(){
+    const int N = 2; //size in one dimension
+    int N3 = N * N * N;
+    int nnz = N3 * 3 -2;
+    using T = float;
+    SparseMatrixCRS <T> result(N3, nnz);
+    lancoz_gpu<T>(N, &result);
 
-//     // printf("Resulting Lancoz matrix:\n");
-//     // for(int i = 0; i < result.N; i++) {
-//     //     std::cout << "Row " << i << ": ";
-//     //     for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-//     //         std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-//     //     }
-//     //     std::cout << std::endl;
-//     // }
+    printf("Resulting Lancoz matrix:\n");
+    for(int i = 0; i < 10; i++) {
+        std::cout << "Row " << i << ": ";
+        for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
+            std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
+        }
+        std::cout << std::endl;
+    }
 
-//     return 0;
-// }
+    return 0;
+}
