@@ -47,6 +47,7 @@ void lancoz(const int N, SparseMatrixCRS <T> *result) {
     //remining iterations
 
     for(int j = 1; j < A.N; j++) {
+        //beta * v_{j-1}
         scale_vector<T>(A.N, -beta, v, tmp);
         if(is_zero(beta)) {
             counter++;
