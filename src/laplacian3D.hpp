@@ -134,42 +134,33 @@ void generate_laplacian3D(const int N, SparseMatrixCRS <T> &laplacian_3d) {
     SparseMatrixCRS <T> laplacian_1d(N, nnz);
     create_1D_laplacian_CRS(laplacian_1d.N, laplacian_1d.col.data(), 
                             laplacian_1d.row_starts.data(), laplacian_1d.val.data());
-    printf("Laplacian 1D created with nnz: %d\n", laplacian_1d.row_starts[N]);
 
     SparseMatrixCRS <T> identity_mat(N, N);
     create_identity_matrix_CRS(identity_mat.N, identity_mat.col.data(), 
                                 identity_mat.row_starts.data(), identity_mat.val.data());
-    printf("identity created with nnz: %d\n", identity_mat.row_starts[N]);
 
     //Temporary matrices for 3D lapalcian Kronecker products
     SparseMatrixCRS <T> temp_L_I(N * N, laplacian_1d.nnz * identity_mat.nnz);
     sparse_kronecker_product_CRS(&laplacian_1d, &identity_mat, &temp_L_I);
-    printf("temp_L_I created with nnz: %d\n", temp_L_I.row_starts[N * N]);
 
     SparseMatrixCRS <T> temp_I_I(N * N, identity_mat.nnz * identity_mat.nnz);
     sparse_kronecker_product_CRS(&identity_mat, &identity_mat, &temp_I_I);
-    printf("hej\n");
-    printf("temp_I_I created with nnz: %d\n", temp_I_I.row_starts[N * N]);
 
     //For laplacian in 3D: L_I_I + I_L_I + I_I_L
     SparseMatrixCRS <T> L_I_I(N * N * N, temp_L_I.nnz * identity_mat.nnz);
     sparse_kronecker_product_CRS(&temp_L_I, &identity_mat, &L_I_I);
-    printf("L_I_I created with nnz: %d\n", L_I_I.row_starts[N * N * N]);
 
     SparseMatrixCRS <T> I_L_I(N * N * N, identity_mat.nnz * temp_L_I.nnz);
     sparse_kronecker_product_CRS(&identity_mat, &temp_L_I, &I_L_I);
-    printf("I_L_I created with nnz: %d\n", I_L_I.row_starts[N * N * N]);
 
     SparseMatrixCRS <T> I_I_L(N * N * N, identity_mat.nnz * identity_mat.nnz * laplacian_1d.nnz);
     sparse_kronecker_product_CRS(&temp_I_I, &laplacian_1d, &I_I_L);
-    printf("I_I_L created with nnz: %d\n", I_I_L.row_starts[N * N * N]);
 
 
     //Final laplacian in 3D matrix
     laplacian_3d = SparseMatrixCRS <T>(N * N * N, L_I_I.nnz + I_L_I.nnz + I_I_L.nnz);
     sparse_matrix_addition_CRS(&L_I_I, &I_L_I, &I_I_L, &laplacian_3d);
-    printf("3D Laplacian created with nnz: %d\n", laplacian_3d.row_starts[laplacian_3d.N]);
-    printf("hej\n");
+
 
     
     //print values for each row of final laplacian
