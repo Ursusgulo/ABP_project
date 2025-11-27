@@ -33,7 +33,7 @@ void scale_vector(const int N, const T scalar, const T *x, T *y){
 template <typename T>
 bool is_zero(T x) {
     if constexpr (std::is_floating_point_v<T>)
-        return std::abs(x) < 1e-12;
+        return std::abs(x) < 1e-6;
     else
         return x == 0;
 }
