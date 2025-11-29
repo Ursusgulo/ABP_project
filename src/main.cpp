@@ -1,5 +1,5 @@
-#include "lancoz.hpp"
-#include "lancoz.cu"
+#include "lancoz.cuh"
+
 
 
 
@@ -13,78 +13,82 @@
 
 void benchmark_triad(const unsigned long N, const long long repeat)
 {
-    int m = 20 * N; 
-    using T = float;
-    Timings timings;
+  int m = 20 * N; 
+  using T = float;
+  Timings timings;
 
     // TODO inside of loop??
-    SparseMatrixCRS <T> result(m*m, m*3-2);
+  SparseMatrixCRS <T> result(m*m, m*3-2);
 
   const unsigned int           n_tests = 20;
   const unsigned long long int n_repeat =
     repeat > 0 ? repeat : std::max(1UL, 100000000U / N);
+
   double best = 1e10, worst = 0, avg = 0;
-  for (unsigned int t = 0; t < n_tests; ++t)
+  for (unsigned int t = 0; t < n_repeat; ++t)
     {
       // type of t1: std::chrono::steady_clock::time_point
-      const auto t1 = std::chrono::steady_clock::now();
-
-      for (unsigned int rep = 0; rep < n_repeat; ++rep)
-            lancoz_gpu<T>(N, m, &result, &timings);
-
       
-      // Measure time of entire lancoz function
-      const double time =
-        std::chrono::duration_cast<std::chrono::duration<double>>(
-          std::chrono::steady_clock::now() - t1)
-          .count();
 
-      best  = std::min(best, time / n_repeat);
-      worst = std::max(worst, time / n_repeat);
-      avg += time / n_repeat;
+      // for (unsigned int rep = 0; rep < n_repeat; ++rep)
+      lancoz_gpu(N, m, &result, &timings);
+
+    
+          
     }
+   
+    float spmv_avg_s = timings.spmv_s / (n_repeat * (m)); // TODO change to m?
+    float h2d_avg_s = timings.h2d_s / (n_repeat);
+    float lanczos_avg_s = timings.lanczos_s / (n_repeat);
+
 
     // TODO 
     // This is the times of the parts from within the lancoz function
     // The timings struct holds the total times, calculate average same way as for total
     std::cout << "==== Benchmark results ====\n";
-    std::cout << "HostToDevice: " << timings.h2d_s << " s\n";
-    std::cout << "HostToDevice: " << timings.h2d_s << " s\n";
-    std::cout << "SpMV avg:     " << timings.spmv_avg_s << " s\n";
-    std::cout << "Lanczos loop:" << timings.lanczos_s << " s\n";
+    std::cout << "HostToDevice: " << h2d_avg_s << " s\n";
+    std::cout << "SpMV avg:     " << spmv_avg_s << " s\n";
+    std::cout << "Lanczos loop:" << lanczos_avg_s << " s\n";
     std::cout << "Lanczos total:" << best << " s\n";
+
+    printf("Resulting Lancoz matrix gpu:\n");
+    for(int i = 0; i < m; i++) {
+        std::cout << "Row " << i << ": ";
+        for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
+            std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
+        }
+        std::cout << std::endl;
+    }
 }
 
-// int main(int argc, char **argv)
-// {
+int main(int argc, char **argv)
+{
+  long long          N           = -1;
+  long long          n_repeat    = 100;
 
-
-//   long long          N           = -1;
-//   long long          n_repeat    = 100;
-
-//   if (argc < 3)
-//     {
+  if (argc < 3)
+    {
       
-//         std::cout << "Error, expected odd number of common line arguments"
-//                   << std::endl
-//                   << "Expected line of the form" << std::endl
-//                   << "-N 100 -repeat 100 -number double" << std::endl;
-//       std::abort();
-//     }
+        std::cout << "Error, 2 arguments"
+                  << std::endl
+                  << "Expected line of the form" << std::endl
+                  << "-N 100 -repeat 100 -number double" << std::endl;
+      std::abort();
+    }
 
-//   // parse from the command line
-//   for (unsigned l = 1; l < argc; l += 2)
-//     {
-//       std::string option = argv[l];
-//       if (option == "-N")
-//         N = std::atoll(argv[l + 1]);
-//       else if (option == "-repeat")
-//         n_repeat = std::atoll(argv[l + 1]);
-//       else
-//         std::cout << "Unknown option " << option << " - ignored!" << std::endl;
-//     }
-
-    
+  // parse from the command line
+  for (unsigned l = 1; l < argc; l += 2)
+    {
+      std::string option = argv[l];
+      if (option == "-N")
+        N = std::atoll(argv[l + 1]);
+      else if (option == "-repeat")
+        n_repeat = std::atoll(argv[l + 1]);
+      else
+        std::cout << "Unknown option " << option << " - ignored!" << std::endl;
+    }
 
 
-// }
+    benchmark_triad(N,n_repeat);
+
+}
