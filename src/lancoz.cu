@@ -1,9 +1,6 @@
-#include "lancoz.hpp"
-#include <cublas_v2.h>
-#include <cmath>
-#include <chrono>
 
-const int block_size = 512;
+#include "lancoz.cuh"
+
 
 
 #define CUDA_CHECK(call)                                                     \
@@ -46,11 +43,7 @@ void new_vector_v(const int N, const float *w, const float beta, float *v, int c
     }
 }
 
-struct Timings { 
-    float h2d_s = 0.0;
-    float spmv_avg_s = 0.0;
-    float lanczos_s = 0.0;
- };
+
 
 void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timings *timings) {    
     int *d_A_row_starts;
@@ -91,11 +84,9 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
 
     new_vector_v<<<n_blocks, block_size>>>(new_N, d_w, beta, d_v, 0);
 
-    // compute_spmv<float>(new_N, &A, h_v, h_w);
     d_compute_spmv<<<n_blocks, block_size>>>(new_N, d_A_row_starts, d_A_col, d_A_val, d_v, d_w);
 
-    //alpha = w*v
-    // alpha = dot_product(new_N, h_w, h_v);
+
     cublasSdot(
         handle,
         new_N,
@@ -104,9 +95,7 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
         &alpha
     );
     
-    //w' ||Ax - alpha*v||
-    //beta = ||w'||
-    // float beta = gemv_norm<float>(new_N, -alpha, h_w, h_v);
+
 
     h_tmp = -alpha;
 
@@ -216,28 +205,28 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
     cublasDestroy(handle);
 }
 
-int main() {
-    const int N = 2; //size in one dimension
-    // int N3 = N * N * N;
-    //int nnz = N3 * 3 -2;
-    int m = 20 * N; 
-    if(m > N*N*N) {
-        m = N*N*N;
-    }
-    using T = float;
-    Timings timings;
-    SparseMatrixCRS <float> result(m, m*3-2); //floatODO time 
-    lancoz_gpu(N, m, &result, &timings);
+// int main() {
+//     const int N = 2; //size in one dimension
+//     // int N3 = N * N * N;
+//     //int nnz = N3 * 3 -2;
+//     int m = 20 * N; 
+//     if(m > N*N*N) {
+//         m = N*N*N;
+//     }
+//     using T = float;
+//     Timings timings;
+//     SparseMatrixCRS <float> result(m, m*3-2); //floatODO time 
+//     lancoz_gpu(N, m, &result, &timings);
 
-    printf("Resulting Lancoz matrix:\n");
-    for(int i = 0; i < m; i++) {
-        std::cout << "Row " << i << ": ";
-        for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-            std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-        }
-        std::cout << std::endl;
-    }
-    printf("result->row_starts[8]: %d\n", result.row_starts[7]);
-    printf("result->val[result->row_starts[7]+1]: %f\n", result.val[result.row_starts[7]+1]);
-    return 0;
-}
+//     printf("Resulting Lancoz matrix:\n");
+//     for(int i = 0; i < m; i++) {
+//         std::cout << "Row " << i << ": ";
+//         for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
+//             std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
+//         }
+//         std::cout << std::endl;
+//     }
+//     printf("result->row_starts[8]: %d\n", result.row_starts[7]);
+//     printf("result->val[result->row_starts[7]+1]: %f\n", result.val[result.row_starts[7]+1]);
+//     return 0;
+// }
