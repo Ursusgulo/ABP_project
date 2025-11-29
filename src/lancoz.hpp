@@ -77,7 +77,7 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result) {
             result->row_starts[j + 1] = result->row_starts[j] + 2;
         }
         beta = gemv_norm<T>(A.N, -alpha, w, v);
-        beta = is_zero(beta) ? 0 : beta;
+        beta = is_zero(beta) ? 0.f : beta;
 
     }
     delete[] v;
