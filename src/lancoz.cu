@@ -1,6 +1,7 @@
 #include "lancoz.hpp"
 #include <cublas_v2.h>
 #include <cmath>
+#include <chrono>
 
 const int block_size = 512;
 
@@ -60,18 +61,21 @@ void new_vector_v(const std::size_t N, const T *w, const T *beta, T *v, int coun
     }
 }
 
-
-
-
+struct Timings { 
+    float h2d_s = 0.0;
+    float spmv_avg_s = 0.0;
+    float lanczos_s = 0.0;
+ };
 
 template <typename T>
-void lancoz_gpu(const std::size_t N, const std::size_t m, SparseMatrixCRS <T> *result) {
+void lancoz_gpu(const std::size_t N, const std::size_t m, SparseMatrixCRS <T> *result, Timings *timings) {    
     std::size_t *d_A_row_starts;
     int *d_A_col;
     T *h_v, *h_w;
     T *d_A_val, d_A_N;
     T *d_v, *d_w, *d_tmp;
     T alpha, h_tmp;
+    int spmv_total_time;
 
     SparseMatrixCRS <T> A;
     generate_laplacian3D<T>(N, A);
@@ -120,23 +124,26 @@ void lancoz_gpu(const std::size_t N, const std::size_t m, SparseMatrixCRS <T> *r
     cudaMalloc(&d_tmp, new_N*sizeof(T));
 
     //Copy Laplacian3D matrix to device
+    const auto t1 = std::chrono::steady_clock::now();
     cudaMemcpy(d_A_val, A.val.data(), A.nnz*sizeof(T), cudaMemcpyHostToDevice);
     cudaMemcpy(d_A_row_starts, A.row_starts.data(), (new_N + 1)*sizeof(std::size_t), cudaMemcpyHostToDevice);
     cudaMemcpy(d_A_col, A.col.data(), A.nnz*sizeof(int), cudaMemcpyHostToDevice);
 
-    //copy result matrix to device
-
-    
     //copy vectors to device   
     cudaMemcpy(d_v, h_v, new_N*sizeof(T), cudaMemcpyHostToDevice); 
     cudaMemcpy(d_w, h_w, new_N*sizeof(T), cudaMemcpyHostToDevice);
+    const double host_to_dev_time =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+          std::chrono::steady_clock::now() - t1)
+          .count();
 
-
+    timings->h2d_s += host_to_dev_time;
     cublasHandle_t handle;
     cublasCreate(&handle);
     int n_blocks = (new_N + block_size - 1) / (block_size);
 
     T axpy_scalar = -1;
+    const auto loop_start = std::chrono::steady_clock::now();
     for(int j = 1; j < m; j++) {
 
         //-b * v_{j-1}
@@ -168,8 +175,15 @@ void lancoz_gpu(const std::size_t N, const std::size_t m, SparseMatrixCRS <T> *r
         // new_vector_v<T><<<n_blocks, block_size>>>(new_N, d_w, T beta, d_v, j); // EBBAS FIX
         cudaDeviceSynchronize();
         
+        const auto spmv_start = std::chrono::steady_clock::now();
         d_compute_spmv<T><<<n_blocks, block_size>>>(new_N, d_A_row_starts, d_A_col, d_A_val, d_v, d_w);
         cudaDeviceSynchronize();
+        const double spmv_time =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+          std::chrono::steady_clock::now() - spmv_start)
+          .count();
+        spmv_total_time += spmv_time;
+
 
         cublasSaxpy(
             handle,
@@ -220,7 +234,17 @@ void lancoz_gpu(const std::size_t N, const std::size_t m, SparseMatrixCRS <T> *r
         );
         beta = std::sqrt(beta);
 
-    }
+    }    
+    cudaDeviceSynchronize();
+    const double lanczos_time =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+          std::chrono::steady_clock::now() - t1)
+          .count();
+    timings->lanczos_s += lanczos_time;
+
+    // Average SpMV time and add to struct
+    timings -> spmv_avg_s = spmv_total_time / (float)(m-1);
+
     cudaFree(d_A_val);
     cudaFree(d_A_row_starts);
     cudaFree(d_A_col);
@@ -232,23 +256,29 @@ void lancoz_gpu(const std::size_t N, const std::size_t m, SparseMatrixCRS <T> *r
     delete [] h_w;
 }
 
-int main() {
-    const int N = 2; //size in one dimension
-    int N3 = N * N * N;
-    int nnz = N3 * 3 -2;
-    int m = 20 * N; 
-    using T = float;
-    SparseMatrixCRS <T> result(m*m, m*3-2); //EBBA FIX changed to N3 -> m*m and nnz -> m*3-2
-    lancoz_gpu<T>(N, m, &result);
+// int main() {
+//     const int N = 2; //size in one dimension
+//     // int N3 = N * N * N;
+//     //int nnz = N3 * 3 -2;
+//     int m = 20 * N; 
+//     using T = float;
+//     Timings timings;
+//     SparseMatrixCRS <T> result(m*m, m*3-2); //TODO time 
+//     lancoz_gpu<T>(N, m, &result, &timings);
 
-    printf("Resulting Lancoz matrix:\n");
-    for(int i = 0; i < m; i++) {
-        std::cout << "Row " << i << ": ";
-        for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-            std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-        }
-        std::cout << std::endl;
-    }
+//     // printf("Resulting Lancoz matrix:\n");
+//     // for(int i = 0; i < m; i++) {
+//     //     std::cout << "Row " << i << ": ";
+//     //     for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
+//     //         std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
+//     //     }
+//     //     std::cout << std::endl;
+//     // }
 
-    return 0;
-}
+//     std::cout << "==== Benchmark results ====\n";
+//     std::cout << "HostToDevice: " << timings.h2d_s << " s\n";
+//     std::cout << "SpMV avg:     " << timings.spmv_avg_s << " s\n";
+//     std::cout << "Lanczos total:" << timings.lanczos_s << " s\n";
+
+//     return 0;
+// }
