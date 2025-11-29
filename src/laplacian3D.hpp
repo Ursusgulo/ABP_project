@@ -26,7 +26,7 @@ struct SparseMatrixCRS {
 template <typename T>
 void create_1D_laplacian_CRS(int N, int *col, int *row_starts, T *val) {
     row_starts[0] = 0;
-    int seq[3] = {1,-2,1};
+    float seq[3] = {1.f,-2.f,1.f};
     val[0] = -2;
     val[1] = 1;
     col[0] = 0;
@@ -38,7 +38,7 @@ void create_1D_laplacian_CRS(int N, int *col, int *row_starts, T *val) {
         if(i == N -1) from_seq = 2;
         for (int j = 0; j < from_seq; j++) {
             col[row_starts[i] + j] = (i-1) + j;
-            val[row_starts[i] + j] = seq[j];
+            val[row_starts[i] + j] = seq[j] * 1/((float(N)+1.f)*(float(N)+1.f));
         }
         row_starts[i + 1] = row_starts[i] + from_seq;
     }

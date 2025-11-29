@@ -2,6 +2,10 @@
 #include "math_utils.hpp"
 #include <cmath>
 
+struct Timings {
+    float h2d_s = 0.0f;
+    float spmv_s = 0.0f;
+};
 
 template <typename T>
 void compute_spmv(const int N,
@@ -18,8 +22,9 @@ void compute_spmv(const int N,
 }
 
 template <typename T>
-void lancoz(const int N,const int m, SparseMatrixCRS <T> *result) {
+void lancoz(const int N,const int m, SparseMatrixCRS <T> *result, Timings* timings) {
     const int nnz = N * 3 - 2;
+    double spmv_total_time = 0;
     
     //generate laplacian matrix in 3D
     SparseMatrixCRS <T> A;
@@ -55,7 +60,10 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result) {
             scale_vector<T>(A.N, 1/beta, w, v);
         }
 
+        const auto spmv_start = std::chrono::steady_clock::now();
         compute_spmv<T>(A.N, &A, v, w);
+        const auto spmv_end = std::chrono::steady_clock::now();
+        spmv_total_time += std::chrono::duration<float>(spmv_end - spmv_start).count();
 
         gemv_norm<T>(A.N, 1, w, tmp);
         
@@ -64,13 +72,17 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result) {
         
         alpha = is_zero(alpha) ? 0 : alpha;
 
-        result->val[result->row_starts[j]-1] = beta;
-        result->val[result->row_starts[j]] = beta;
-        result->val[result->row_starts[j]+1] = alpha;
+        if(beta != 0.f) {
+            result->val[result->row_starts[j]-1] = beta;
+            result->val[result->row_starts[j]] = beta;
+            result->col[result->row_starts[j]-1] = j;
+            result->col[result->row_starts[j]] = j - 1;
+        }
+        if(alpha != 0.f) {
+            result->val[result->row_starts[j]+1] = alpha;
+            result->col[result->row_starts[j] +1 ] = j ;
+        }
 
-        result->col[result->row_starts[j]-1] = j;
-        result->col[result->row_starts[j]] = j - 1;
-        result->col[result->row_starts[j] +1 ] = j ;
 
         result->row_starts[j + 1] = result->row_starts[j] + 3;
         if(j == A.N -1) {
@@ -80,6 +92,8 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result) {
         beta = is_zero(beta) ? 0.f : beta;
 
     }
+    timings->spmv_s = spmv_total_time;
+    delete[] tmp;
     delete[] v;
     delete[] w; 
     

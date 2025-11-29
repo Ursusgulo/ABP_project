@@ -14,11 +14,16 @@
 void benchmark_triad(const unsigned long N, const long long repeat)
 {
   int m = 20 * N; 
+  if(m > N*N*N) {
+      m = N*N*N;
+  }
   using T = float;
-  Timings timings;
+  Timings gpu_timings;
+  Timings cpu_timings;
 
-    // TODO inside of loop??
-  SparseMatrixCRS <T> result(m*m, m*3-2);
+    // TODO insidof loop??
+  SparseMatrixCRS <T> result_gpu(m, m*3-2);
+  SparseMatrixCRS <T> result_cpu(m, m*3-2);
 
   const unsigned int           n_tests = 20;
   const unsigned long long int n_repeat =
@@ -31,34 +36,40 @@ void benchmark_triad(const unsigned long N, const long long repeat)
       
 
       // for (unsigned int rep = 0; rep < n_repeat; ++rep)
-      lancoz_gpu(N, m, &result, &timings);
+      lancoz_gpu(N, m, &result_gpu, &gpu_timings);
+      lancoz<T>(N, m, &result_cpu, &cpu_timings);
 
-    
-          
     }
    
-    float spmv_avg_s = timings.spmv_s / (n_repeat * (m)); // TODO change to m?
-    float h2d_avg_s = timings.h2d_s / (n_repeat);
-    float lanczos_avg_s = timings.lanczos_s / (n_repeat);
+  float spmv_avg_s_gpu = gpu_timings.spmv_s / (n_repeat * (m-1)); // TODO change to m?
+  float h2d_avg_s = gpu_timings.h2d_s / (n_repeat);
+  float spmv_avg_s_cpu = cpu_timings.spmv_s / (n_repeat * (m-1));
 
 
-    // TODO 
-    // This is the times of the parts from within the lancoz function
-    // The timings struct holds the total times, calculate average same way as for total
-    std::cout << "==== Benchmark results ====\n";
-    std::cout << "HostToDevice: " << h2d_avg_s << " s\n";
-    std::cout << "SpMV avg:     " << spmv_avg_s << " s\n";
-    std::cout << "Lanczos loop:" << lanczos_avg_s << " s\n";
-    std::cout << "Lanczos total:" << best << " s\n";
+  // TODO 
+  // This is the times of the parts from within the lancoz function
+  // The timings struct holds the total times, calculate average same way as for total
+  std::cout << "==== Benchmark results ====\n";
+  std::cout << "HostToDevice: " << h2d_avg_s << " s\n";
+  std::cout << "SpMV avg GPU: " << spmv_avg_s_gpu << " s\n";
+  std::cout << "SpMV avg CPU: " << spmv_avg_s_cpu << " s\n";
 
-    printf("Resulting Lancoz matrix gpu:\n");
-    for(int i = 0; i < m; i++) {
-        std::cout << "Row " << i << ": ";
-        for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-            std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-        }
-        std::cout << std::endl;
-    }
+  printf("Resulting Lancoz matrix gpu:\n");
+  for(int i = 0; i < 10; i++) {
+      std::cout << "Row " << i << ": ";
+      for(int j = result_gpu.row_starts[i]; j < result_gpu.row_starts[i+1]; j++) {
+          std::cout << "(" << result_gpu.col[j] << ", " << result_gpu.val[j] << ") ";
+      }
+      std::cout << std::endl;
+  }
+  printf("Resulting Lancoz matrix cpu:\n");
+  for(int i = 0; i < 10; i++) {
+      std::cout << "Row " << i << ": ";
+      for(int j = result_cpu.row_starts[i]; j < result_cpu.row_starts[i+1]; j++) {
+          std::cout << "(" << result_cpu.col[j] << ", " << result_cpu.val[j] << ") ";
+      }
+      std::cout << std::endl;
+  }
 }
 
 int main(int argc, char **argv)

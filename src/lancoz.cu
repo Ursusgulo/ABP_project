@@ -51,7 +51,7 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
     float *d_A_val;
     float *d_v, *d_w, *d_tmp;
     float alpha, h_tmp;
-    int spmv_total_time;
+    double spmv_total_time = 0;
     float beta = 0;
 
     SparseMatrixCRS <float> A;
@@ -75,6 +75,11 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
     CUDA_CHECK(cudaMemcpy(d_A_val, A.val.data(), A.nnz*sizeof(float), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_A_row_starts, A.row_starts.data(), (new_N + 1)*sizeof(int), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_A_col, A.col.data(), A.nnz*sizeof(int), cudaMemcpyHostToDevice));
+    const double host_to_dev_time =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+          std::chrono::steady_clock::now() - t1)
+          .count();
+    timings->h2d_s += host_to_dev_time;
 
 
     cublasHandle_t handle;
@@ -113,7 +118,7 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
     result->col[0] = 0;
     result->row_starts[1] = 2;
 
-
+    
     for(int j = 1; j < m; j++) {
 
         cublasSdot(
@@ -124,9 +129,7 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
             &beta
         );
         beta = std::sqrt(beta);
-        if (fabsf(beta) < 1e-5f) {
-            beta = 0.0f;
-        }
+        beta = is_zero(beta) ? 0.f : beta;
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -150,9 +153,14 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
         new_vector_v<<<n_blocks, block_size>>>(new_N, d_w, beta, d_v, j);
         CUDA_CHECK(cudaDeviceSynchronize());
         
-
+        const auto spmv_start = std::chrono::steady_clock::now();
         d_compute_spmv<<<n_blocks, block_size>>>(new_N, d_A_row_starts, d_A_col, d_A_val, d_v, d_w);
         CUDA_CHECK(cudaDeviceSynchronize());
+        const double spmv_time =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+          std::chrono::steady_clock::now() - spmv_start)
+          .count();
+        spmv_total_time += spmv_time;
 
         cublasSaxpy(
             handle,
@@ -172,13 +180,18 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
         );
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        result->val[result->row_starts[j]+1] = alpha;
-        result->val[result->row_starts[j]-1] = beta;
-        result->val[result->row_starts[j]] = beta;
+        if(!is_zero(alpha)) {
+            result->val[result->row_starts[j]+1] = alpha;
+            result->col[result->row_starts[j] +1 ] = j ;
+        }
+        if(!is_zero(beta)) {
+            result->val[result->row_starts[j]-1] = beta;
+            result->val[result->row_starts[j]] = beta;
+            result->col[result->row_starts[j]-1] = j;
+            result->col[result->row_starts[j]] = j - 1;
+        }
 
-        result->col[result->row_starts[j]-1] = j;
-        result->col[result->row_starts[j]] = j - 1;
-        result->col[result->row_starts[j] +1 ] = j ;
+
 
         result->row_starts[j + 1] = result->row_starts[j] + 3;
         if(j == new_N -1) {
@@ -195,7 +208,7 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
         );
         CUDA_CHECK(cudaDeviceSynchronize());
     }    
-
+    timings->spmv_s += spmv_total_time;
     CUDA_CHECK(cudaFree(d_A_val));
     CUDA_CHECK(cudaFree(d_A_row_starts));
     CUDA_CHECK(cudaFree(d_A_col));
