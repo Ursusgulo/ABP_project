@@ -55,7 +55,7 @@ void benchmark_triad(const unsigned long N, const long long repeat)
   std::cout << "SpMV avg CPU: " << spmv_avg_s_cpu << " s\n";
 
   printf("Resulting Lancoz matrix gpu:\n");
-  for(int i = 0; i < 10; i++) {
+  for(int i = 0; i < m; i++) {
       std::cout << "Row " << i << ": ";
       for(int j = result_gpu.row_starts[i]; j < result_gpu.row_starts[i+1]; j++) {
           std::cout << "(" << result_gpu.col[j] << ", " << result_gpu.val[j] << ") ";
@@ -63,7 +63,7 @@ void benchmark_triad(const unsigned long N, const long long repeat)
       std::cout << std::endl;
   }
   printf("Resulting Lancoz matrix cpu:\n");
-  for(int i = 0; i < 10; i++) {
+  for(int i = 0; i < m; i++) {
       std::cout << "Row " << i << ": ";
       for(int j = result_cpu.row_starts[i]; j < result_cpu.row_starts[i+1]; j++) {
           std::cout << "(" << result_cpu.col[j] << ", " << result_cpu.val[j] << ") ";
