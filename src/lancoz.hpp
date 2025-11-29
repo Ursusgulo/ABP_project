@@ -4,23 +4,22 @@
 
 
 template <typename T>
-void compute_spmv(const std::size_t N,
+void compute_spmv(const int N,
                     const SparseMatrixCRS<T> *matrix,
                     const T *vec, 
                     T *result){
 
-    for (std::size_t i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         result[i] = 0;
-        for(std::size_t j = matrix->row_starts[i]; j < matrix->row_starts[i + 1]; j++) {
+        for(int j = matrix->row_starts[i]; j < matrix->row_starts[i + 1]; j++) {
             result[i] += matrix->val[j] * vec[matrix->col[j]];
         }
     }
 }
 
 template <typename T>
-void lancoz(const int N, SparseMatrixCRS <T> *result) {
+void lancoz(const int N,const int m, SparseMatrixCRS <T> *result) {
     const int nnz = N * 3 - 2;
-    int counter = 0;
     
     //generate laplacian matrix in 3D
     SparseMatrixCRS <T> A;
@@ -29,7 +28,7 @@ void lancoz(const int N, SparseMatrixCRS <T> *result) {
     //generate unit vector
     T *v = new T[A.N];
     T *tmp = new T[A.N];
-    generate_unit_vector<T>(A.N, v, counter);
+    generate_unit_vector<T>(A.N, v, 0);
 
  
     // iteration one
@@ -46,13 +45,12 @@ void lancoz(const int N, SparseMatrixCRS <T> *result) {
     result->row_starts[1] = 2;
     //remining iterations
 
-    for(int j = 1; j < A.N; j++) {
+    for(int j = 1; j < m; j++) {
         //beta * v_{j-1}
         scale_vector<T>(A.N, -beta, v, tmp);
         if(is_zero(beta)) {
-            counter++;
-            //orthogonal to all previous unit vectors
-            generate_unit_vector<T>(A.N, v, counter);
+
+            generate_unit_vector<T>(A.N, v, j);
         } else {
             scale_vector<T>(A.N, 1/beta, w, v);
         }
@@ -103,6 +101,36 @@ void lancoz(const int N, SparseMatrixCRS <T> *result) {
 //     //     }
 //     //     std::cout << std::endl;
 //     // }
+
+//     return 0;
+// }
+
+// int main() {
+//     const int N = 2; //size in one dimension
+//     // int N3 = N * N * N;
+//     //int nnz = N3 * 3 -2;
+//     int m = 20 * N; 
+//     if(m > N*N*N) {
+//         m = N*N*N;
+//     }
+//     using T = float;
+//     SparseMatrixCRS <T> result(m, m*3-2); //TODO time 
+//     lancoz<T>(N, m, &result);
+
+//     printf("Resulting Lancoz matrix:\n");
+//     for(int i = 0; i < m; i++) {
+//         std::cout << "Row " << i << ": ";
+//         for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
+//             std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
+//         }
+//         std::cout << std::endl;
+//     }
+//     printf("result->row_starts[8]: %d\n", result.row_starts[7]);
+//     printf("result->val[result->row_starts[7]+1]: %f\n", result.val[result.row_starts[7]+1]);
+//     // std::cout << "==== Benchmark results ====\n";
+//     // std::cout << "HostToDevice: " << timings.h2d_s << " s\n";
+//     // std::cout << "SpMV avg:     " << timings.spmv_avg_s << " s\n";
+//     // std::cout << "Lanczos total:" << timings.lanczos_s << " s\n";
 
 //     return 0;
 // }

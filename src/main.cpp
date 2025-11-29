@@ -55,38 +55,36 @@ void benchmark_triad(const unsigned long N, const long long repeat)
     std::cout << "Lanczos total:" << best << " s\n";
 }
 
-int main(int argc, char **argv)
-{
+// int main(int argc, char **argv)
+// {
 
 
-  long long          N           = -1;
-  long long          n_repeat    = 100;
+//   long long          N           = -1;
+//   long long          n_repeat    = 100;
 
-  if (argc % 2 == 0)
-    {
+//   if (argc < 3)
+//     {
       
-        std::cout << "Error, expected odd number of common line arguments"
-                  << std::endl
-                  << "Expected line of the form" << std::endl
-                  << "-N 100 -repeat 100 -number double" << std::endl;
-      std::abort();
-    }
+//         std::cout << "Error, expected odd number of common line arguments"
+//                   << std::endl
+//                   << "Expected line of the form" << std::endl
+//                   << "-N 100 -repeat 100 -number double" << std::endl;
+//       std::abort();
+//     }
 
-  // parse from the command line
-  for (unsigned l = 1; l < argc; l += 2)
-    {
-      std::string option = argv[l];
-      if (option == "-N")
-        N = std::atoll(argv[l + 1]);
-      else if (option == "-repeat")
-        n_repeat = std::atoll(argv[l + 1]);
-      else
-        std::cout << "Unknown option " << option << " - ignored!" << std::endl;
-    }
+//   // parse from the command line
+//   for (unsigned l = 1; l < argc; l += 2)
+//     {
+//       std::string option = argv[l];
+//       if (option == "-N")
+//         N = std::atoll(argv[l + 1]);
+//       else if (option == "-repeat")
+//         n_repeat = std::atoll(argv[l + 1]);
+//       else
+//         std::cout << "Unknown option " << option << " - ignored!" << std::endl;
+//     }
 
     
 
-#ifdef HAVE_MPI
-  MPI_Finalize();
-#endif
-}
+
+// }
