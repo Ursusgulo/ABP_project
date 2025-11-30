@@ -26,9 +26,9 @@ void d_compute_spmv(const int N,
   {
     float sum = 0;
     for (int idx = row_starts[row]; idx < row_starts[row + 1]; ++idx)
-      sum += values[idx] * x[column_indices[idx]];
-    y[row] = sum;
-  }
+        sum += values[idx] * x[column_indices[idx]];
+        y[row] = sum;
+    }
 }
 
 __global__ 

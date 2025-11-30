@@ -11,15 +11,14 @@
 //     SparseMatrixCRS <T> result(m*m, m*3-2); //EBBA FIX changed to N3 -> m*m and nnz -> m*3-2
 //     lancoz_gpu<T>(N, m, &result);
 
-void benchmark_triad(const unsigned long N, const long long repeat)
+void benchmark_triad(const unsigned long N, const long long repeat, int gpu)
 {
   int m = 20 * N; 
   if(m > N*N*N) {
       m = N*N*N;
   }
   using T = float;
-  Timings gpu_timings;
-  Timings cpu_timings;
+  Timings timings;
 
     // TODO insidof loop??
   SparseMatrixCRS <T> result_gpu(m, m*3-2);
@@ -32,52 +31,49 @@ void benchmark_triad(const unsigned long N, const long long repeat)
   double best = 1e10, worst = 0, avg = 0;
   for (unsigned int t = 0; t < n_repeat; ++t)
     {
-      // type of t1: std::chrono::steady_clock::time_point
-      
-
-      // for (unsigned int rep = 0; rep < n_repeat; ++rep)
-      lancoz_gpu(N, m, &result_gpu, &gpu_timings);
-      lancoz<T>(N, m, &result_cpu, &cpu_timings);
-
+      if (gpu) lancoz_gpu(N, m, &result_gpu, &timings);
+      else lancoz<T>(N, m, &result_cpu, &timings);
     }
    
-  float spmv_avg_s_gpu = gpu_timings.spmv_s / (n_repeat * (m-1)); // TODO change to m?
-  float h2d_avg_s = gpu_timings.h2d_s / (n_repeat);
-  float spmv_avg_s_cpu = cpu_timings.spmv_s / (n_repeat * (m-1));
+  float spmv_avg_s = timings.spmv_s / (n_repeat * (m-1)); // TODO change to m?
+  float h2d_avg_s = timings.h2d_s / (n_repeat);
 
 
-  // TODO 
-  // This is the times of the parts from within the lancoz function
-  // The timings struct holds the total times, calculate average same way as for total
-  std::cout << "==== Benchmark results ====\n";
-  std::cout << "HostToDevice: " << h2d_avg_s << " s\n";
-  std::cout << "SpMV avg GPU: " << spmv_avg_s_gpu << " s\n";
-  std::cout << "SpMV avg CPU: " << spmv_avg_s_cpu << " s\n";
+  float gbytes = 1.0e-9 * sizeof(float);
+  float flops_per_spmv = N*N*N*2*3 - 2*2; // 2 operations (mul + add) per non-zero
+  float memops_per_spmv = N*N*N*(3*3) - 2*3; // 3 memory ops (read val, read col, write res) per non-zero read
+  float gflops = flops_per_spmv * 1.0e-9 / spmv_avg_s; // 7 flops per non-zero
+  float bandwidth = memops_per_spmv * gbytes / spmv_avg_s; // in GB/s
 
-  printf("Resulting Lancoz matrix gpu:\n");
-  for(int i = 0; i < m; i++) {
-      std::cout << "Row " << i << ": ";
-      for(int j = result_gpu.row_starts[i]; j < result_gpu.row_starts[i+1]; j++) {
-          std::cout << "(" << result_gpu.col[j] << ", " << result_gpu.val[j] << ") ";
-      }
-      std::cout << std::endl;
-  }
-  printf("Resulting Lancoz matrix cpu:\n");
-  for(int i = 0; i < m; i++) {
-      std::cout << "Row " << i << ": ";
-      for(int j = result_cpu.row_starts[i]; j < result_cpu.row_starts[i+1]; j++) {
-          std::cout << "(" << result_cpu.col[j] << ", " << result_cpu.val[j] << ") ";
-      }
-      std::cout << std::endl;
-  }
+  if(gpu)std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<", " << h2d_avg_s << "\n";
+  else std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<"\n";
+
+
+  // printf("Resulting Lancoz matrix gpu:\n");
+  // for(int i = 0; i < m; i++) {
+  //     std::cout << "Row " << i << ": ";
+  //     for(int j = result_gpu.row_starts[i]; j < result_gpu.row_starts[i+1]; j++) {
+  //         std::cout << "(" << result_gpu.col[j] << ", " << result_gpu.val[j] << ") ";
+  //     }
+  //     std::cout << std::endl;
+  // }
+  // printf("Resulting Lancoz matrix cpu:\n");
+  // for(int i = 0; i < m; i++) {
+  //     std::cout << "Row " << i << ": ";
+  //     for(int j = result_cpu.row_starts[i]; j < result_cpu.row_starts[i + 1]; j++) {
+  //       std::cout << "(" << result_cpu.col[j] << ", " << result_cpu.val[j] << ") ";
+  //     }
+  //     std::cout << std::endl;
+  // }
 }
 
 int main(int argc, char **argv)
 {
   long long          N           = -1;
   long long          n_repeat    = 100;
+  int                gpu         = 0;
 
-  if (argc < 3)
+  if (argc < 4)
     {
       
         std::cout << "Error, 2 arguments"
@@ -95,11 +91,16 @@ int main(int argc, char **argv)
         N = std::atoll(argv[l + 1]);
       else if (option == "-repeat")
         n_repeat = std::atoll(argv[l + 1]);
+      else if (option == "-gpu")
+        gpu = std::atoi(argv[l + 1]);
       else
         std::cout << "Unknown option " << option << " - ignored!" << std::endl;
     }
 
+    if (gpu) std::cout << "N, m, glfops, bandwitdh(GB/S), h2d\n";
+    else std::cout << "N, m, glfops, bandwitdh(GB/S)\n";
 
-    benchmark_triad(N,n_repeat);
+
+    benchmark_triad(N,n_repeat, gpu);
 
 }

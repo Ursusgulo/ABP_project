@@ -62,8 +62,9 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result, Timings* timin
 
         const auto spmv_start = std::chrono::steady_clock::now();
         compute_spmv<T>(A.N, &A, v, w);
-        const auto spmv_end = std::chrono::steady_clock::now();
-        spmv_total_time += std::chrono::duration<float>(spmv_end - spmv_start).count();
+        spmv_total_time += std::chrono::duration_cast<std::chrono::duration<double>>(
+          std::chrono::steady_clock::now() - spmv_start)
+          .count();
 
         gemv_norm<T>(A.N, 1, w, tmp);
         
@@ -99,52 +100,3 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result, Timings* timin
     
 }
 
-// int main(){
-//     const int N = 10; //size in one dimension
-//     int N3 = N * N * N;
-//     int nnz = N3 * 3 -2;
-//     using T = double;
-//     SparseMatrixCRS <T> result(N3, nnz);
-//     lancoz<double>(N, &result);
-
-//     // printf("Resulting Lancoz matrix:\n");
-//     // for(int i = 0; i < result.N; i++) {
-//     //     std::cout << "Row " << i << ": ";
-//     //     for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-//     //         std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-//     //     }
-//     //     std::cout << std::endl;
-//     // }
-
-//     return 0;
-// }
-
-// int main() {
-//     const int N = 2; //size in one dimension
-//     // int N3 = N * N * N;
-//     //int nnz = N3 * 3 -2;
-//     int m = 20 * N; 
-//     if(m > N*N*N) {
-//         m = N*N*N;
-//     }
-//     using T = float;
-//     SparseMatrixCRS <T> result(m, m*3-2); //TODO time 
-//     lancoz<T>(N, m, &result);
-
-//     printf("Resulting Lancoz matrix:\n");
-//     for(int i = 0; i < m; i++) {
-//         std::cout << "Row " << i << ": ";
-//         for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-//             std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-//         }
-//         std::cout << std::endl;
-//     }
-//     printf("result->row_starts[8]: %d\n", result.row_starts[7]);
-//     printf("result->val[result->row_starts[7]+1]: %f\n", result.val[result.row_starts[7]+1]);
-//     // std::cout << "==== Benchmark results ====\n";
-//     // std::cout << "HostToDevice: " << timings.h2d_s << " s\n";
-//     // std::cout << "SpMV avg:     " << timings.spmv_avg_s << " s\n";
-//     // std::cout << "Lanczos total:" << timings.lanczos_s << " s\n";
-
-//     return 0;
-// }
