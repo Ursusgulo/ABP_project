@@ -21,12 +21,12 @@ void d_compute_spmv(const int N,
                              const float *x, 
                              float *y)
 {
-  int row = threadIdx.x + blockIdx.x * blockDim.x;
-  if (row < N)
-  {
-    float sum = 0;
-    for (int idx = row_starts[row]; idx < row_starts[row + 1]; ++idx)
-        sum += values[idx] * x[column_indices[idx]];
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+    if (row < N) {
+        float sum = 0;
+        for (int idx = row_starts[row]; idx < row_starts[row + 1]; ++idx) {
+            sum += values[idx] * x[column_indices[idx]];
+        }
         y[row] = sum;
     }
 }
@@ -131,7 +131,6 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
         beta = std::sqrt(beta);
         beta = is_zero(beta) ? 0.f : beta;
 
-        CUDA_CHECK(cudaDeviceSynchronize());
 
         cublasScopy(
             handle,
@@ -141,7 +140,6 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
             d_tmp,     
             1         
         );
-        CUDA_CHECK(cudaDeviceSynchronize());
         cublasSscal(
             handle,   
             new_N,                 
@@ -151,7 +149,6 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
         );
         
         new_vector_v<<<n_blocks, block_size>>>(new_N, d_w, beta, d_v, j);
-        CUDA_CHECK(cudaDeviceSynchronize());
         
         const auto spmv_start = std::chrono::steady_clock::now();
         d_compute_spmv<<<n_blocks, block_size>>>(new_N, d_A_row_starts, d_A_col, d_A_val, d_v, d_w);
@@ -169,7 +166,6 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
             d_tmp, 1,
             d_w, 1
         );
-        CUDA_CHECK(cudaDeviceSynchronize());
 
         cublasSdot(
             handle,
@@ -178,7 +174,6 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
             d_v, 1,
             &alpha
         );
-        CUDA_CHECK(cudaDeviceSynchronize());
 
         if(!is_zero(alpha)) {
             result->val[result->row_starts[j]+1] = alpha;

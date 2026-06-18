@@ -41,13 +41,15 @@ void benchmark_triad(const unsigned long N, const long long repeat, int gpu)
 
   float gbytes = 1.0e-9 * sizeof(float);
   float flops_per_spmv = N*N*N*2*3 - 2*2; // 2 operations (mul + add) per non-zero
-  float memops_per_spmv = N*N*N*(3*3) - 2*3; // 3 memory ops (read val, read col, write res) per non-zero read
+  //float memops_per_spmv = N*N*N*(3*3) - 2*3; // 3 memory ops (read val, read col, write res) per non-zero read
+  float memops_per_spmv = N*N*N*(3*3) + N*N*N * 3 - 2*3; // 3 memory ops (read val, read col, write res) per non-zero read
+
   float gflops = flops_per_spmv * 1.0e-9 / spmv_avg_s; // 7 flops per non-zero
   float bandwidth = memops_per_spmv * gbytes / spmv_avg_s; // in GB/s
 
   if(gpu)std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<", " << h2d_avg_s << "\n";
   else std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<"\n";
-
+  std::cout << spmv_avg_s << " s avg spmv time\n";
 
   // printf("Resulting Lancoz matrix gpu:\n");
   // for(int i = 0; i < m; i++) {
