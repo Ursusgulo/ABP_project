@@ -14,6 +14,8 @@ T dot_product(const int N, const T *w, const T *v){
 template <typename T>
 T gemv_norm(const int N, const T beta, T *Ax, const T *y){
     T norm = 0;
+
+    #pragma omp parallel for
     for(int i = 0; i < N; i++) {
         Ax[i] = Ax[i] + beta * y[i];
         norm += Ax[i] * Ax[i];
@@ -25,6 +27,7 @@ T gemv_norm(const int N, const T beta, T *Ax, const T *y){
 // normalize vector w to get new v
 template <typename T>
 void scale_vector(const int N, const T scalar, const T *x, T *y){
+    
     for(int i = 0; i < N; i++) {
         y[i] = x[i] * scalar;
     }

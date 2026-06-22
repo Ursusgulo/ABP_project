@@ -22,13 +22,13 @@ void d_compute_spmv(const int N,
                              float *y)
 {
   int row = threadIdx.x + blockIdx.x * blockDim.x;
-  if (row < N)
-  {
-    float sum = 0;
-    for (int idx = row_starts[row]; idx < row_starts[row + 1]; ++idx)
-        sum += values[idx] * x[column_indices[idx]];
+    if (row < N)
+    {
+        float sum = 0;
+        for (int idx = row_starts[row]; idx < row_starts[row + 1]; ++idx)
+            sum += values[idx] * x[column_indices[idx]];
         y[row] = sum;
-    }
+  }
 }
 
 __global__ 
@@ -56,6 +56,7 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
 
     SparseMatrixCRS <float> A;
     generate_laplacian3D<float>(N, A);
+    timings->nnz_a = A.nnz;
 
     int new_N = A.N;
 
@@ -153,6 +154,7 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
         new_vector_v<<<n_blocks, block_size>>>(new_N, d_w, beta, d_v, j);
         CUDA_CHECK(cudaDeviceSynchronize());
         
+        // Compute spmv and time it
         const auto spmv_start = std::chrono::steady_clock::now();
         d_compute_spmv<<<n_blocks, block_size>>>(new_N, d_A_row_starts, d_A_col, d_A_val, d_v, d_w);
         CUDA_CHECK(cudaDeviceSynchronize());
@@ -217,29 +219,3 @@ void lancoz_gpu(const int N, const int m, SparseMatrixCRS <float> *result, Timin
     CUDA_CHECK(cudaFree(d_tmp));
     cublasDestroy(handle);
 }
-
-// int main() {
-//     const int N = 2; //size in one dimension
-//     // int N3 = N * N * N;
-//     //int nnz = N3 * 3 -2;
-//     int m = 20 * N; 
-//     if(m > N*N*N) {
-//         m = N*N*N;
-//     }
-//     using T = float;
-//     Timings timings;
-//     SparseMatrixCRS <float> result(m, m*3-2); //floatODO time 
-//     lancoz_gpu(N, m, &result, &timings);
-
-//     printf("Resulting Lancoz matrix:\n");
-//     for(int i = 0; i < m; i++) {
-//         std::cout << "Row " << i << ": ";
-//         for(int j = result.row_starts[i]; j < result.row_starts[i+1]; j++) {
-//             std::cout << "(" << result.col[j] << ", " << result.val[j] << ") ";
-//         }
-//         std::cout << std::endl;
-//     }
-//     printf("result->row_starts[8]: %d\n", result.row_starts[7]);
-//     printf("result->val[result->row_starts[7]+1]: %f\n", result.val[result.row_starts[7]+1]);
-//     return 0;
-// }

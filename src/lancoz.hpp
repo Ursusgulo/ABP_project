@@ -1,10 +1,13 @@
 #include "laplacian3D.hpp"
 #include "math_utils.hpp"
 #include <cmath>
+#include <omp.h>
+
 
 struct Timings {
     float h2d_s = 0.0f;
     float spmv_s = 0.0f;
+    int nnz_a = 0;
 };
 
 template <typename T>
@@ -13,11 +16,13 @@ void compute_spmv(const int N,
                     const T *vec, 
                     T *result){
 
+    #pragma omp parallel for
     for (int i = 0; i < N; i++) {
-        result[i] = 0;
+        T sum = 0;
         for(int j = matrix->row_starts[i]; j < matrix->row_starts[i + 1]; j++) {
-            result[i] += matrix->val[j] * vec[matrix->col[j]];
+            sum += matrix->val[j] * vec[matrix->col[j]];
         }
+        result[i] = sum;
     }
 }
 
@@ -29,6 +34,7 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result, Timings* timin
     //generate laplacian matrix in 3D
     SparseMatrixCRS <T> A;
     generate_laplacian3D<T>(N, A);
+    timings->nnz_a = A.nnz;
 
     //generate unit vector
     T *v = new T[A.N];
@@ -93,7 +99,7 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result, Timings* timin
         beta = is_zero(beta) ? 0.f : beta;
 
     }
-    timings->spmv_s = spmv_total_time;
+    timings->spmv_s += spmv_total_time;
     delete[] tmp;
     delete[] v;
     delete[] w; 

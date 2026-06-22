@@ -38,10 +38,10 @@ void benchmark_triad(const unsigned long N, const long long repeat, int gpu)
   float spmv_avg_s = timings.spmv_s / (n_repeat * (m-1)); // TODO change to m?
   float h2d_avg_s = timings.h2d_s / (n_repeat);
 
-
+  float nnz_A = timings.nnz_a;
   float gbytes = 1.0e-9 * sizeof(float);
-  float flops_per_spmv = N*N*N*2*3 - 2*2; // 2 operations (mul + add) per non-zero
-  float memops_per_spmv = N*N*N*(3*3) - 2*3; // 3 memory ops (read val, read col, write res) per non-zero read
+  float flops_per_spmv = nnz_A * 2; // 2 operations (mul + add) per non-zero
+  float memops_per_spmv = nnz_A * 3 + 3 * N*N*N; // 3 memory ops (read val, read col, write res) per non-zero read
   float gflops = flops_per_spmv * 1.0e-9 / spmv_avg_s; // 7 flops per non-zero
   float bandwidth = memops_per_spmv * gbytes / spmv_avg_s; // in GB/s
 
@@ -49,22 +49,6 @@ void benchmark_triad(const unsigned long N, const long long repeat, int gpu)
   else std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<"\n";
 
 
-  // printf("Resulting Lancoz matrix gpu:\n");
-  // for(int i = 0; i < m; i++) {
-  //     std::cout << "Row " << i << ": ";
-  //     for(int j = result_gpu.row_starts[i]; j < result_gpu.row_starts[i+1]; j++) {
-  //         std::cout << "(" << result_gpu.col[j] << ", " << result_gpu.val[j] << ") ";
-  //     }
-  //     std::cout << std::endl;
-  // }
-  // printf("Resulting Lancoz matrix cpu:\n");
-  // for(int i = 0; i < m; i++) {
-  //     std::cout << "Row " << i << ": ";
-  //     for(int j = result_cpu.row_starts[i]; j < result_cpu.row_starts[i + 1]; j++) {
-  //       std::cout << "(" << result_cpu.col[j] << ", " << result_cpu.val[j] << ") ";
-  //     }
-  //     std::cout << std::endl;
-  // }
 }
 
 int main(int argc, char **argv)
@@ -100,7 +84,14 @@ int main(int argc, char **argv)
     if (gpu) std::cout << "N, m, glfops, bandwitdh(GB/S), h2d\n";
     else std::cout << "N, m, glfops, bandwitdh(GB/S)\n";
 
-
-    benchmark_triad(N,n_repeat, gpu);
+    if (N == -1)
+        for (unsigned long long NN = 8; NN < 160; NN += 8)
+        {
+            benchmark_triad(NN,n_repeat, gpu);
+        }
+    else
+        {
+            benchmark_triad(N,n_repeat, gpu);
+        }
 
 }
