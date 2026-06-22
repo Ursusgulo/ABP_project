@@ -44,10 +44,10 @@ void lancoz(const int N,const int m, SparseMatrixCRS <T> *result, Timings* timin
  
     // iteration one
     T *w = new T[A.N];
-    compute_spmv<T>(A.N, &A, v, w);
+    compute_spmv<T>(A.N, &A, v, w); //w1' = Av1
 
-    T alpha = dot_product(A.N, w, v);
-    T beta = gemv_norm<T>(A.N, -alpha, w, v);
+    T alpha = dot_product(A.N, w, v); //alpha1 = w1' * v1
+    T beta = gemv_norm<T>(A.N, -alpha, w, v); //
     
     // store in T matrix
     result->row_starts[0] = 0;
