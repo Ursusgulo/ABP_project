@@ -40,8 +40,6 @@ void benchmark_lancoz(const unsigned long N, const long long repeat, int gpu)
 
   // N*N*N*(3*3) + N*N*N * 3 - 2*3   saknas parentes?
   float nnz_A = timings.nnz_a;
-  float bytes_per_spmv = 
-
   float gbytes = 1.0e-9 * sizeof(float);
   float flops_per_spmv = nnz_A * 2; // 2 operations (mul + add) per non-zero
   float memops_per_spmv = nnz_A * 3 + 3 * N*N*N; // 3 memory ops (read val, read col, write res) per non-zero read
@@ -54,16 +52,23 @@ void benchmark_lancoz(const unsigned long N, const long long repeat, int gpu)
 
 }
 
-template <typename Number>
 void benchmark_spmv(const unsigned long N, const long long repeat, int gpu)
 {
+  int *d_A_row_starts;
+  int *d_A_col;
+  float *d_A_val;
+  float *d_v, *d_w, *d_tmp;
+  float alpha, h_tmp;
+  double spmv_total_time = 0;
+  float beta = 0;
+
   int m = 20 * N; 
   if(m > N*N*N) {
       m = N*N*N;
   }
 
-  SparseMatrixCRS <Number> A;
-  generate_laplacian3D<Number>(N, A);
+  SparseMatrixCRS <float> A;
+  generate_laplacian3D<float>(N, A);
 
   int new_N = A.N;
 
@@ -79,15 +84,9 @@ void benchmark_spmv(const unsigned long N, const long long repeat, int gpu)
   CUDA_CHECK(cudaMalloc(&d_tmp, new_N*sizeof(float)));
 
   //Copy Laplacian3D matrix to device
-  const auto t1 = std::chrono::steady_clock::now();
   CUDA_CHECK(cudaMemcpy(d_A_val, A.val.data(), A.nnz*sizeof(float), cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_A_row_starts, A.row_starts.data(), (new_N + 1)*sizeof(int), cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_A_col, A.col.data(), A.nnz*sizeof(int), cudaMemcpyHostToDevice));
-  const double host_to_dev_time =
-      std::chrono::duration_cast<std::chrono::duration<double>>(
-        std::chrono::steady_clock::now() - t1)
-        .count();
-  timings->h2d_s += host_to_dev_time;
 
   int n_blocks = (new_N + block_size - 1) / (block_size);
 
@@ -117,7 +116,7 @@ void benchmark_spmv(const unsigned long N, const long long repeat, int gpu)
   float gflops = flops_per_spmv * 1.0e-9 / spmv_avg_s; // 7 flops per non-zero
   float bandwidth = memops_per_spmv * gbytes / spmv_avg_s; // in GB/s
 
-  if(gpu)std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<", " << h2d_avg_s << "\n";
+  if(gpu)std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth << "\n";
   else std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<"\n";
 
 
