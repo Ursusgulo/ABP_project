@@ -52,15 +52,12 @@ void benchmark_lancoz(const unsigned long N, const long long repeat, int gpu)
 
 }
 
-void benchmark_spmv(const unsigned long N, const long long repeat, int gpu)
+void benchmark_spmv_gpu(const unsigned long N, const long long repeat)
 {
   int *d_A_row_starts;
   int *d_A_col;
   float *d_A_val;
   float *d_v, *d_w, *d_tmp;
-  float alpha, h_tmp;
-  double spmv_total_time = 0;
-  float beta = 0;
 
   int m = 20 * N; 
   if(m > N*N*N) {
@@ -118,8 +115,44 @@ void benchmark_spmv(const unsigned long N, const long long repeat, int gpu)
 
   if(gpu)std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth << "\n";
   else std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<"\n";
+}
+
+void benchmark_spmv_cpu(const unsigned long N, const long long repeat)
+{
+  const int nnz = N * 3 - 2;
+  double spmv_total_time = 0;
+  
+  //generate laplacian matrix in 3D
+  SparseMatrixCRS <T> A;
+  generate_laplacian3D<T>(N, A);
+  timings->nnz_a = A.nnz;
+
+  //generate unit vector
+  T *v = new T[A.N];
+  T *tmp = new T[A.N];
+  generate_unit_vector<T>(A.N, v, 0);
 
 
+  // iteration one
+  T *w = new T[A.N];
+
+  const auto t1 = std::chrono::steady_clock::now();
+    compute_spmv<T>(A.N, &A, v, w);
+  const double time =
+  std::chrono::duration_cast<std::chrono::duration<double>>(
+    std::chrono::steady_clock::now() - t1)
+    .count();
+
+  float spmv_avg_s = time / n_repeat;
+  float nnz_A = A.nnz;
+  // float bytes_per_spmv = nnz_A( 2 * sizeof(float) + sizeof(int)) + N*N*N(sizeof(float) + 2 * sizeof(int)); //new
+  float gbytes = 1.0e-9 * sizeof(float);
+  float flops_per_spmv = nnz_A * 2; // 2 operations (mul + add) per non-zero
+  float memops_per_spmv = nnz_A * 3; // 3 memory ops (read val, read col, write res) per non-zero read
+  float gflops = flops_per_spmv * 1.0e-9 / spmv_avg_s; // 7 flops per non-zero
+  float bandwidth = memops_per_spmv * gbytes / spmv_avg_s; // in GB/s
+
+  std::cout << N << ", " << m << ", " << gflops << ", " << bandwidth <<"\n";
 }
 
 int main(int argc, char **argv)
@@ -158,11 +191,17 @@ int main(int argc, char **argv)
     if (N == -1)
         for (unsigned long long NN = 8; NN < 160; NN += 8)
         {
-            benchmark_lancoz(NN,n_repeat, gpu);
+          if(gpu)
+            benchmark_spmv_gpu(NN,n_repeat);
+          else
+            benchmark_spmv_cpu(NN,n_repeat);
         }
     else
         {
-            benchmark_lancoz(N,n_repeat, gpu);
+          if(gpu)
+            benchmark_spmv_gpu(N,n_repeat);
+          else
+            benchmark_spmv_cpu(N,n_repeat);
         }
 
 }
