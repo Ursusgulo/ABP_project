@@ -22,7 +22,7 @@ const int block_size = 512;
 
 
 void lancoz_gpu(const int N, const int m, SparseMatrixCRS<float>* result, Timings* timings);
-void d_compute_spmv(const int N,
+__global__ void d_compute_spmv(const int N,
                              const int *row_starts,
                              const int *column_indices,
                              const float *values,
